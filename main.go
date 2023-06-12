@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -99,14 +100,14 @@ func handle(w http.ResponseWriter, r *http.Request) {
 	w.Write(json)
 }
 
-func handleRequests() {
-	http.HandleFunc("/", handle)
-	log.Fatal(http.ListenAndServe(":10000", nil))
-}
-
 func main() {
 	mQ = NewMultipleQueue()
-	handleRequests()
+	http.HandleFunc("/", handle)
+
+	port := flag.String("port", "80", "pass port number")
+	flag.Parse()
+
+	log.Fatal(http.ListenAndServe(":"+*port, nil))
 }
 
 type Element struct {
