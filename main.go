@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"sync"
@@ -22,9 +23,16 @@ type Response struct {
 }
 
 var mQ *multipleQueue
+var rQ *RuquestsQueue
+
+func getQueueName(r *http.Request) string {
+	uri, _ := url.Parse(r.RequestURI)
+	return path.Base(uri.Path)
+}
 
 func putToQueue(r *http.Request) *Response {
-	qName := path.Base(r.Host)
+	qName := getQueueName(r)
+
 	val := r.URL.Query().Get("v")
 	if val == "" {
 		return &Response{
@@ -40,7 +48,8 @@ func putToQueue(r *http.Request) *Response {
 }
 
 func deQueue(r *http.Request) *Response {
-	qName := path.Base(r.Host)
+	qName := getQueueName(r)
+
 	if qName == "" {
 		return &Response{
 			Body:   "",
@@ -60,25 +69,23 @@ func deQueue(r *http.Request) *Response {
 		delay = time.Duration(num)
 	}
 	if delay != 0 {
-		ch := make(chan *Element)
-		go func() {
-			ch <- mQ.WaitDequeue(qName)
-		}()
+		ch := rQ.GetChannel(qName)
+		go rQ.PushFirst(qName, mQ.WaitDequeue(qName).value)
+
 		select {
 		case <-time.After(delay * time.Second):
 			return &Response{
 				Body:   "",
 				Status: 404,
 			}
-		case elem := <-ch:
+		case val := <-ch:
 			return &Response{
-				Body:   elem.value,
+				Body:   val,
 				Status: 200,
 			}
 		}
 
 	} else {
-
 		el := mQ.Dequeue(qName)
 		if el == nil {
 			return &Response{
@@ -113,12 +120,68 @@ func handle(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	mQ = NewMultipleQueue()
+	rQ = NewRuquestsQueue()
 	http.HandleFunc("/", handle)
 
 	port := flag.String("port", "80", "pass port number")
 	flag.Parse()
 
 	log.Fatal(http.ListenAndServe(":"+*port, nil))
+}
+
+///////////////////////////////////////////////////////////
+/////////// Ruquests queue ///////////////////////////////////
+///////////////////////////////////////////////////////////
+
+type request struct {
+	ch   chan string
+	next *request
+}
+
+type RuquestsQueue struct {
+	queues map[string]*request
+	mu     sync.Mutex
+}
+
+func NewRuquestsQueue() *RuquestsQueue {
+	return &RuquestsQueue{
+		queues: map[string]*request{},
+	}
+}
+
+func (q *RuquestsQueue) GetChannel(nameQueue string) chan string {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	req := &request{}
+	req.ch = make(chan string, 1)
+
+	if _, ok := q.queues[nameQueue]; !ok || q.queues[nameQueue] == nil {
+		q.queues[nameQueue] = req
+
+	} else {
+		end := q.queues[nameQueue]
+		for end.next != nil {
+			end = end.next
+		}
+		end.next = req
+	}
+
+	return req.ch
+}
+
+func (q *RuquestsQueue) PushFirst(nameQueue string, value string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if _, ok := q.queues[nameQueue]; !ok || q.queues[nameQueue] == nil {
+		panic("GetChannel colling previously was less than Push First")
+	}
+	var req *request
+	req = q.queues[nameQueue]
+	q.queues[nameQueue] = q.queues[nameQueue].next
+
+	req.ch <- value
 }
 
 // //////////////////////////////////////////////////////////////

@@ -80,3 +80,34 @@ func TestPushAndDequeue(t *testing.T) {
 		t.Errorf("Element should nil")
 	}
 }
+
+func TestNewRuquestsQueue(t *testing.T) {
+	rQ := NewRuquestsQueue()
+	ch1 := rQ.GetChannel("q1")
+	ch2 := rQ.GetChannel("q1")
+	ch3 := rQ.GetChannel("q1")
+	ch4 := rQ.GetChannel("q1")
+	ch5 := rQ.GetChannel("q1")
+
+	go rQ.PushFirst("q1", "v1")
+	go rQ.PushFirst("q1", "v2")
+	go rQ.PushFirst("q1", "v3")
+	go rQ.PushFirst("q1", "v4")
+	go rQ.PushFirst("q1", "v5")
+	for {
+		select {
+		case <-ch1:
+			fmt.Println("case1")
+		case <-ch2:
+			fmt.Println("case2")
+		case <-ch3:
+			fmt.Println("case3")
+		case <-ch4:
+			fmt.Println("case4")
+		case <-ch5:
+			fmt.Println("case5")
+			return
+		}
+
+	}
+}
