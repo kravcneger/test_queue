@@ -62,7 +62,7 @@ func deQueue(r *http.Request) *Response {
 	if delay != 0 {
 		ch := make(chan *Element)
 		go func() {
-			ch <- mQ.Dequeue(qName)
+			ch <- mQ.WaitDequeue(qName)
 		}()
 		select {
 		case <-time.After(delay * time.Second):
@@ -80,9 +80,16 @@ func deQueue(r *http.Request) *Response {
 	} else {
 
 		el := mQ.Dequeue(qName)
-		return &Response{
-			Body:   el.value,
-			Status: 200,
+		if el == nil {
+			return &Response{
+				Body:   "",
+				Status: 404,
+			}
+		} else {
+			return &Response{
+				Body:   el.value,
+				Status: 200,
+			}
 		}
 	}
 }
@@ -158,7 +165,8 @@ func (mq *multipleQueue) Push(key string, value string) {
 	}
 }
 
-func (mq *multipleQueue) Dequeue(key string) *Element {
+// Wait appearance element in a queue and retrun it
+func (mq *multipleQueue) WaitDequeue(key string) *Element {
 	mq.mu.Lock()
 
 	if !mq.isExist(key) {
@@ -175,6 +183,24 @@ func (mq *multipleQueue) Dequeue(key string) *Element {
 	}
 	mq.mu.Unlock()
 	return <-mq.queues[key]
+}
+
+// Return nil if Queue empty
+func (mq *multipleQueue) Dequeue(key string) *Element {
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+	if !mq.isExist(key) {
+		return nil
+	}
+
+	if len(mq.queues[key]) == 1 {
+		head := <-mq.queues[key]
+		if head.next != nil {
+			mq.queues[key] <- head.next
+		}
+		return head
+	}
+	return nil
 }
 
 func (mq *multipleQueue) isExist(name string) bool {

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestPushAndDequeue(t *testing.T) {
+func TestPushAndWaitDequeue(t *testing.T) {
 	var wg sync.WaitGroup
 	mQ := NewMultipleQueue()
 	result := []string{}
@@ -20,7 +20,7 @@ func TestPushAndDequeue(t *testing.T) {
 
 		for i := 0; i < 4; i++ {
 			fmt.Println("Dequeue", i)
-			e := mQ.Dequeue("q1")
+			e := mQ.WaitDequeue("q1")
 			result = append(result, e.value)
 		}
 		wg.Done()
@@ -44,13 +44,39 @@ func TestPushAndDequeue(t *testing.T) {
 	mQ.Push("q1", "val1")
 	mQ.Push("q1", "val2")
 
-	elem := mQ.Dequeue("q1")
+	elem := mQ.WaitDequeue("q1")
 	if elem.value != "val1" {
 		t.Errorf("Element should be %s instead %s", "val1", elem.value)
 	}
 
-	elem = mQ.Dequeue("q1")
+	elem = mQ.WaitDequeue("q1")
 	if elem.value != "val2" {
 		t.Errorf("Element should be %s instead %s", "val2", elem.value)
+	}
+}
+
+func TestPushAndDequeue(t *testing.T) {
+
+	mQ := NewMultipleQueue()
+	elem := mQ.Dequeue("q1")
+	if elem != nil {
+		t.Errorf("Element should nil")
+	}
+
+	mQ.Push("q1", "val1")
+	mQ.Push("q1", "val2")
+	elem = mQ.Dequeue("q1")
+	if elem.value != "val1" {
+		t.Errorf("Element should val1")
+	}
+
+	elem = mQ.Dequeue("q1")
+	if elem.value != "val2" {
+		t.Errorf("Element should val2")
+	}
+
+	elem = mQ.Dequeue("q1")
+	if elem != nil {
+		t.Errorf("Element should nil")
 	}
 }
